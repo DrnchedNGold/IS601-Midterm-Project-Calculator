@@ -2,51 +2,75 @@
 app/calculator.py
 Calculator class for performing arithmetic operations
 """
-from app.operations import Operations
 
+import sys
+from app.calculation import Calculation, CalculationFactory
 
-def calculator():
-    """Basic REPL calculator that performs addition, subtraction, multiplication, and division."""
+def calculator() -> None:
+    """REPL calculator that performs addition, subtraction, multiplication, and division."""
     
     print("Welcome to the calculator REPL! Type 'exit' to quit")
     
     while True:
-        # Now we ask the user to type something, like "add 5 3". 
-        # This will get the operation (like "add") and two numbers from the user.
-        user_input = input("Enter an operation (add, subtract, multiply, divide) and two numbers, or 'exit' to quit: ")
-
-        # This part checks if the user typed "exit". If they did, we print a message and stop the calculator.
-        if user_input.lower() == "exit":
-            print("Exiting calculator...")
-            break
-
         try:
-            # Split input into three parts: the operation (add, subtract, etc.) and the two numbers.
-            operation, num1, num2 = user_input.split()
-            # Check user input by converting to floats.
-            num1, num2 = float(num1), float(num2)
-        except ValueError:
-            # Throw error if incorect input format is given.
-            print("Invalid input. Please follow the format: <operation> <num1> <num2>")
-            continue
+            # Prompt the user to enter an operation and two numbers
+            user_input: str = input(">> ").strip()
 
-        # Check what operation the user asked for and call the right function (addition, subtraction, etc.).
-        if operation == "add":
-            result = Operations.addition(num1, num2)  # We call the correct function.
-        elif operation == "subtract":
-            result = Operations.subtraction(num1, num2)
-        elif operation == "multiply":
-            result = Operations.multiplication(num1, num2)
-        elif operation == "divide":
+            # Check for empty input
+            if not user_input:
+                continue
+
+            # Handle special commands
+            command = user_input.lower()
+
+            if command == "exit":
+                print("Exiting calculator. Goodbye!\n")
+                sys.exit(0)
+
             try:
-                result = Operations.division(num1, num2)
-            except ValueError as e:
-                # Handle dividing by zero.
-                print(e)  # Print error message.
-                continue  # Go back to top and try again.
-        else:
-            # Handle invalid operation input.
-            print(f"Unknown operation '{operation}'. Supported operations: add, subtract, multiply, divide.")
-            continue
+                # Split input into three parts: the operation and the two numbers.
+                operation, num1_str, num2_str = user_input.split()
+                # Check user input by converting to floats.
+                num1: float = float(num1_str)
+                num2: float = float(num2_str)
+            except ValueError:
+                # Throw error if incorect input format is given.
+                print("Invalid input. Please follow the format: <operation> <num1> <num2>")
+                continue
+            
+            # Attempt to create a Calculation instance using the factory
+            try:
+                calculation = CalculationFactory.create_calculation(operation, num1, num2)
+            except ValueError as ve:
+                # Handle unsupported operations
+                print(ve)
+                print("Type 'help' to see the list of supported operations.\n")
+                continue  # Prompt the user again
 
-        print(f"Result: {result}")
+            # Attempt to execute the calculation
+            try:
+                result = calculation.execute()
+            except ZeroDivisionError:
+                # Handle division by zero specifically
+                print("Cannot divide by zero.")
+                print("Please enter a non-zero divisor.\n")
+                continue  # Prompt the user again
+            except Exception as e:
+                # Handle any other unforeseen exceptions
+                print(f"An error occurred during calculation: {e}")
+                print("Please try again.\n")
+                continue  # Prompt the user again
+
+            # Prepare the result string for display
+            result_str: str = f"{calculation}"
+            print(f"Result: {result_str}\n")
+
+        except KeyboardInterrupt:
+            print("\nKeyboard interrupt detected. Exiting calculator. Goodbye!\n")
+            sys.exit(0)
+        except EOFError:
+            print("\nEOF detected. Exiting calculator. Goodbye!\n")
+            sys.exit(0)
+
+if __name__ == "__main__":
+    calculator()

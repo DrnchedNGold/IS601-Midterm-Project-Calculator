@@ -25,6 +25,7 @@ class Operations:
         Example: if we call Operations.subtraction(10.0, 4.0), it will return 6.0.
         """
         return a - b
+    
     @staticmethod
     def multiplication(a: float, b: float) -> float:
         """
