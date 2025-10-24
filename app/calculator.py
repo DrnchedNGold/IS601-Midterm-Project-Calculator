@@ -2,7 +2,7 @@
 app/calculator.py
 Calculator class for performing arithmetic operations
 """
-from app.operations import addition, subtraction, multiplication, division
+from app.operations import Operations
 
 
 def calculator():
@@ -32,14 +32,14 @@ def calculator():
 
         # Check what operation the user asked for and call the right function (addition, subtraction, etc.).
         if operation == "add":
-            result = addition(num1, num2)  # We call the correct function.
+            result = Operations.addition(num1, num2)  # We call the correct function.
         elif operation == "subtract":
-            result = subtraction(num1, num2)
+            result = Operations.subtraction(num1, num2)
         elif operation == "multiply":
-            result = multiplication(num1, num2)
+            result = Operations.multiplication(num1, num2)
         elif operation == "divide":
             try:
-                result = division(num1, num2)
+                result = Operations.division(num1, num2)
             except ValueError as e:
                 # Handle dividing by zero.
                 print(e)  # Print error message.

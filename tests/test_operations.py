@@ -4,14 +4,14 @@ tests/test_operations.py
 
 import pytest
 from typing import Union  # Import Union for type hinting multiple possible types
-from app.operations import addition, subtraction, multiplication, division  # Import Operations class from operations module
+from app.operations import Operations  # Import Operations class from operations module
 
 # Define a type alias for numbers that can be either int or float
 Number = Union[int, float]
 
-# =================================
-# Unit Tests for 'addition'
-# =================================
+# ========================================
+# Unit Tests for 'addition' Method
+# ========================================
 
 @pytest.mark.parametrize(
     "a, b, expected",
@@ -43,18 +43,19 @@ def test_addition(a: Number, b: Number, expected: Number) -> None:
     1. Call the 'addition' method with arguments 'a' and 'b'.
     2. Assert that the result is equal to 'expected'.
 
-    Ex:
+    Examples:
     >>> test_addition(2, 3, 5)
     >>> test_addition(-1, 1, 0)
     """
-    result = addition(a, b)
+    # Create instance of Operations class and call addition method
+    result = Operations.addition(a, b)
     
     # Assert that the result of addition(a, b) matches the expected value
     assert result == expected, f"Expected addition({a}, {b}) to be {expected}, but got {result}"
 
-# =================================
-# Unit Tests for 'subtraction'
-# =================================
+# ========================================
+# Unit Tests for 'subtraction' Method
+# ========================================
 
 @pytest.mark.parametrize(
     "a, b, expected",
@@ -86,17 +87,17 @@ def test_subtraction(a: Number, b: Number, expected: Number) -> None:
     1. Call the 'subtraction' method with arguments 'a' and 'b'.
     2. Assert that the result is equal to 'expected'.
 
-    Ex:
+    Examples:
     >>> test_subtraction(5, 3, 2)
     >>> test_subtraction(-5, -3, -2)
     """
-    result = subtraction(a, b)
+    result = Operations.subtraction(a, b)
     
     assert result == expected, f"Expected subtraction({a}, {b}) to be {expected}, but got {result}"
 
-# =================================
-# Unit Tests for 'multiplication'
-# =================================
+# ========================================
+# Unit Tests for 'multiplication' Method
+# ========================================
 
 @pytest.mark.parametrize(
     "a, b, expected",
@@ -128,17 +129,17 @@ def test_multiplication(a: Number, b: Number, expected: Number) -> None:
     1. Call the 'multiplication' method with arguments 'a' and 'b'.
     2. Assert that the result is equal to 'expected'.
 
-    Ex:
+    Examples:
     >>> test_multiplication(2, 3, 6)
     >>> test_multiplication(-2, -3, 6)
     """    
-    result = multiplication(a, b)
+    result = Operations.multiplication(a, b)
     
     assert result == expected, f"Expected multiplication({a}, {b}) to be {expected}, but got {result}"
 
-# =================================
-# Unit Tests for 'division'
-# =================================
+# ========================================
+# Unit Tests for 'division' Method
+# ========================================
 
 @pytest.mark.parametrize(
     "a, b, expected",
@@ -170,17 +171,17 @@ def test_division(a: Number, b: Number, expected: float) -> None:
     1. Call the 'division' method with arguments 'a' and 'b'.
     2. Assert that the result is equal to 'expected'.
 
-    Ex:
+    Examples:
     >>> test_division(6, 3, 2.0)
     >>> test_division(-6, 3, -2.0)
     """
-    result = division(a, b)
+    result = Operations.division(a, b)
 
     assert result == expected, f"Expected division({a}, {b}) to be {expected}, but got {result}"
 
-# ============================================
+# ===================================================
 # Negative Test Case: Division by Zero
-# ============================================
+# ===================================================
 
 @pytest.mark.parametrize(
     "a, b",
@@ -208,7 +209,7 @@ def test_division_by_zero(a: Number, b: Number) -> None:
     2. Use pytest's 'raises' context manager to catch the expected exception.
     3. Assert that the error message contains "Cannot divide by zero.".
 
-    Ex:
+    Examples:
     >>> test_division_by_zero(1, 0)
     >>> test_division_by_zero(-1, 0)
     """
@@ -216,7 +217,7 @@ def test_division_by_zero(a: Number, b: Number) -> None:
     # Use pytest's context manager to check for a ValueError when dividing by zero
     with pytest.raises(ValueError, match="Cannot divide by zero.") as excinfo:
         # Attempt to divide 'a' by 'b', which should raise a ValueError
-        division(a, b)
+        Operations.division(a, b)
     
     # Assert that the exception message contains the expected error message
     assert "Cannot divide by zero." in str(excinfo.value), \
