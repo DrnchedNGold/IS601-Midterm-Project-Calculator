@@ -1,429 +1,188 @@
-""" tests/test_calculator.py """
-
-import pytest
-from io import StringIO
-from app.calculator import display_help, display_history, calculator
-
-# ===================================================
-# Tests for REPL Calculator Functionality
-# ===================================================
-def test_display_help(capsys):
-    """
-    Test display_help function to ensure it prints the correct help message.
-
-    AAA Pattern:
-    - Arrange: No special setup required for this function.
-    - Act: Call the display_help function.
-    - Assert: Capture the output and verify it matches the expected help message.
-    """
-    # Arrange
-    # No arrangement needed since display_help doesn't require any input or setup.
-
-    # Act
-    display_help()
-
-    # Assert
-    # Capture the printed output
-    captured = capsys.readouterr()
-    expected_output = """
-Calculator REPL Help
---------------------
-Usage:
-    <operation> <number1> <number2>
-    - Perform a calculation with the specified operation and two numbers.
-    - Supported operations:
-        add       : Adds two numbers.
-        subtract  : Subtracts the second number from the first.
-        multiply  : Multiplies two numbers.
-        divide    : Divides the first number by the second.
-
-Special Commands:
-    help      : Display this help message.
-    history   : Show the history of calculations.
-    exit      : Exit the calculator.
-
-Examples:
-    add 10 5
-    subtract 15.5 3.2
-    multiply 7 8
-    divide 20 4
+# tests/caclulator.py
 """
-    # Remove leading/trailing whitespace for comparison
-    assert captured.out.strip() == expected_output.strip()
+Tests for the Calculator class and REPL interface.
 
-def test_display_history_empty(capsys):
-    """
-    Test display_history function when the history is empty.
+These tests verify calculator operations, history management, undo/redo,
+observers, and the command-line interface.
+"""
 
-    AAA Pattern:
-    - Arrange: Create an empty history list.
-    - Act: Call the display_history function with the empty history.
-    - Assert: Capture the output and verify it indicates no calculations have been performed.
-    """
-    # Arrange
-    history = []
+import datetime
+from pathlib import Path
+import pandas as pd
+import pytest
+from unittest.mock import Mock, patch, PropertyMock
+from decimal import Decimal
+from tempfile import TemporaryDirectory
+from app.calculator import Calculator
+from app.calculator_repl import calculator_repl
+from app.calculator_config import CalculatorConfig
+from app.exceptions import OperationError, ValidationError
+from app.history import LoggingObserver, AutoSaveObserver
+from app.operations import OperationFactory
 
-    # Act
-    display_history(history)
+@pytest.fixture
+def calculator():
+    """Creates a calculator with temporary file paths for testing."""
+    with TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        config = CalculatorConfig(base_dir=temp_path)
 
-    # Assert
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "No calculations performed yet."
+        # Mock the config paths to use our temporary directory
+        with patch.object(CalculatorConfig, 'log_dir', new_callable=PropertyMock) as mock_log_dir, \
+             patch.object(CalculatorConfig, 'log_file', new_callable=PropertyMock) as mock_log_file, \
+             patch.object(CalculatorConfig, 'history_dir', new_callable=PropertyMock) as mock_history_dir, \
+             patch.object(CalculatorConfig, 'history_file', new_callable=PropertyMock) as mock_history_file:
+            
+            mock_log_dir.return_value = temp_path / "logs"
+            mock_log_file.return_value = temp_path / "logs/calculator.log"
+            mock_history_dir.return_value = temp_path / "history"
+            mock_history_file.return_value = temp_path / "history/calculator_history.csv"
+            
+            yield Calculator(config=config)
 
-def test_display_history_with_entries(capsys):
-    """
-    Test display_history function when there are entries in the history.
 
-    AAA Pattern:
-    - Arrange: Create a history list with sample calculation entries.
-    - Act: Call the display_history function with the populated history.
-    - Assert: Capture the output and verify it displays the calculations correctly.
-    """
-    # Arrange
-    history = [
-        "AddCalculation: 10.0 Add 5.0 = 15.0",
-        "SubtractCalculation: 20.0 Subtract 3.0 = 17.0",
-        "MultiplyCalculation: 7.0 Multiply 8.0 = 56.0",
-        "DivideCalculation: 20.0 Divide 4.0 = 5.0"
-    ]
+# Initialization Tests
+def test_calculator_initialization(calculator):
+    """Test that calculator starts with empty state."""
+    assert calculator.history == []
+    assert calculator.undo_stack == []
+    assert calculator.redo_stack == []
+    assert calculator.operation_strategy is None
 
-    # Act
-    display_history(history)
+# Logging Tests
+@patch('app.calculator.logging.info')
+def test_logging_setup(logging_info_mock):
+    """Test that logging is configured during initialization."""
+    with patch.object(CalculatorConfig, 'log_dir', new_callable=PropertyMock) as mock_log_dir, \
+         patch.object(CalculatorConfig, 'log_file', new_callable=PropertyMock) as mock_log_file:
+        mock_log_dir.return_value = Path('/tmp/logs')
+        mock_log_file.return_value = Path('/tmp/logs/calculator.log')
+        
+        calculator = Calculator(CalculatorConfig())
+        logging_info_mock.assert_any_call("Calculator initialized with configuration")
 
-    # Assert
-    captured = capsys.readouterr()
-    expected_output = """Calculation History:
-1. AddCalculation: 10.0 Add 5.0 = 15.0
-2. SubtractCalculation: 20.0 Subtract 3.0 = 17.0
-3. MultiplyCalculation: 7.0 Multiply 8.0 = 56.0
-4. DivideCalculation: 20.0 Divide 4.0 = 5.0"""
-    assert captured.out.strip() == expected_output.strip()
+# Observer Tests
+def test_add_observer(calculator):
+    """Test adding an observer to the calculator."""
+    observer = LoggingObserver()
+    calculator.add_observer(observer)
+    assert observer in calculator.observers
 
-def test_calculator_exit(monkeypatch, capsys):
-    """
-    Test handling of 'exit' command.
+def test_remove_observer(calculator):
+    """Test removing an observer from the calculator."""
+    observer = LoggingObserver()
+    calculator.add_observer(observer)
+    calculator.remove_observer(observer)
+    assert observer not in calculator.observers
 
-    AAA Pattern:
-    - Arrange: Prepare the input 'exit' to simulate user typing 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the calculator exits gracefully and prints the exit message.
-    """
-    # Arrange
-    user_input = 'exit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
 
-    # Act
-    with pytest.raises(SystemExit) as exc_info:
-        calculator()
+# Operation Tests
+def test_set_operation(calculator):
+    """Test setting the current operation strategy."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    assert calculator.operation_strategy == operation
 
-    # Assert
-    captured = capsys.readouterr()
-    assert "Exiting calculator. Goodbye!" in captured.out
-    assert exc_info.type == SystemExit
-    assert exc_info.value.code == 0  # Exit code 0 indicates a clean exit
+def test_perform_operation_addition(calculator):
+    """Test performing an addition calculation."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    result = calculator.perform_operation(2, 3)
+    assert result == Decimal('5')
 
-def test_calculator_help_command(monkeypatch, capsys):
-    """
-    Test calculator function's ability to handle the 'help' command.
+def test_perform_operation_validation_error(calculator):
+    """Test that invalid input raises ValidationError."""
+    calculator.set_operation(OperationFactory.create_operation('add'))
+    with pytest.raises(ValidationError):
+        calculator.perform_operation('invalid', 3)
 
-    AAA Pattern:
-    - Arrange: Prepare the input 'help' followed by 'exit' to simulate user interactions.
-    - Act: Call the calculator function.
-    - Assert: Verify that the help message is displayed and the calculator exits gracefully.
-    """
-    # Arrange
-    user_input = 'help\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
+def test_perform_operation_operation_error(calculator):
+    """Test that performing operation without setting one raises OperationError."""
+    with pytest.raises(OperationError, match="No operation set"):
+        calculator.perform_operation(2, 3)
 
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
 
-    # Assert
-    captured = capsys.readouterr()
-    assert "Calculator REPL Help" in captured.out
-    assert "Exiting calculator. Goodbye!" in captured.out
+# Undo/Redo Tests
+def test_undo(calculator):
+    """Test undoing a calculation."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    calculator.perform_operation(2, 3)
+    calculator.undo()
+    assert calculator.history == []
 
-def test_calculator_history(monkeypatch, capsys):
-    """
-    Test calculator's ability to display calculation history.
+def test_redo(calculator):
+    """Test redoing a previously undone calculation."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    calculator.perform_operation(2, 3)
+    calculator.undo()
+    calculator.redo()
+    assert len(calculator.history) == 1
 
-    AAA Pattern:
-    - Arrange: Prepare a sequence of operations followed by 'history' and 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the history is displayed correctly.
-    """
-    # Arrange
-    user_input = 'add 10 5\nsubtract 20 3\nhistory\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
+# History Management Tests
+@patch('app.calculator.pd.DataFrame.to_csv')
+def test_save_history(mock_to_csv, calculator):
+    """Test saving calculation history to CSV."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    calculator.perform_operation(2, 3)
+    calculator.save_history()
+    mock_to_csv.assert_called_once()
 
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Result: AddCalculation: 10.0 Add 5.0 = 15.0" in captured.out
-    assert "Result: SubtractCalculation: 20.0 Subtract 3.0 = 17.0" in captured.out
-    assert "Calculation History:" in captured.out
-    assert "1. AddCalculation: 10.0 Add 5.0 = 15.0" in captured.out
-    assert "2. SubtractCalculation: 20.0 Subtract 3.0 = 17.0" in captured.out
-
-# ===================================================
-# Tests for each arithmetic operation in the REPL calculator
-# ===================================================
-def test_addition(monkeypatch, capsys):
-    """
-    Test addition operation in REPL.
+@patch('app.calculator.pd.read_csv')
+@patch('app.calculator.Path.exists', return_value=True)
+def test_load_history(mock_exists, mock_read_csv, calculator):
+    """Test loading calculation history from CSV."""
+    # Create mock CSV data
+    mock_read_csv.return_value = pd.DataFrame({
+        'operation': ['Addition'],
+        'operand1': ['2'],
+        'operand2': ['3'],
+        'result': ['5'],
+        'timestamp': [datetime.datetime.now().isoformat()]
+    })
     
-    AAA Pattern:
-    - Arrange: Prepare the input 'add 10 5' followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the correct result is displayed.
-    """
-    # Arrange
-    user_input = 'add 10 5\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Result: AddCalculation: 10.0 Add 5.0 = 15.0" in captured.out
-
-def test_subtraction(monkeypatch, capsys):
-    """
-    Test subtraction operation in REPL.
+    calculator.load_history()
     
-    AAA Pattern:
-    - Arrange: Prepare the input 'subtract 10 5' followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the correct result is displayed.
-    """
-    # Arrange
-    user_input = 'subtract 10 5\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
+    # Verify the loaded calculation
+    assert len(calculator.history) == 1
+    assert calculator.history[0].operation == "Addition"
+    assert calculator.history[0].operand1 == Decimal("2")
+    assert calculator.history[0].operand2 == Decimal("3")
+    assert calculator.history[0].result == Decimal("5")
 
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
+def test_clear_history(calculator):
+    """Test clearing all history and undo/redo stacks."""
+    operation = OperationFactory.create_operation('add')
+    calculator.set_operation(operation)
+    calculator.perform_operation(2, 3)
+    calculator.clear_history()
+    assert calculator.history == []
+    assert calculator.undo_stack == []
+    assert calculator.redo_stack == []
 
-    # Assert
-    captured = capsys.readouterr()
-    assert "Result: SubtractCalculation: 10.0 Subtract 5.0 = 5.0" in captured.out
+# REPL Interface Tests
+@patch('builtins.input', side_effect=['exit'])
+@patch('builtins.print')
+def test_calculator_repl_exit(mock_print, mock_input):
+    """Test that exit command saves history and exits gracefully."""
+    with patch('app.calculator.Calculator.save_history') as mock_save_history:
+        calculator_repl()
+        mock_save_history.assert_called_once()
+        mock_print.assert_any_call("History saved successfully.")
+        mock_print.assert_any_call("Goodbye!")
 
-def test_multiplication(monkeypatch, capsys):
-    """
-    Test multiplication operation in REPL.
-    
-    AAA Pattern:
-    - Arrange: Prepare the input 'mulitply 10 5' followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the correct result is displayed.
-    """
-    # Arrange
-    user_input = 'multiply 10 5\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
+@patch('builtins.input', side_effect=['help', 'exit'])
+@patch('builtins.print')
+def test_calculator_repl_help(mock_print, mock_input):
+    """Test that help command displays available commands."""
+    calculator_repl()
+    mock_print.assert_any_call("\nAvailable commands:")
 
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Result: MultiplyCalculation: 10.0 Multiply 5.0 = 50.0" in captured.out
-
-def test_division(monkeypatch, capsys):
-    """
-    Test division operation in REPL.
-    
-    AAA Pattern:
-    - Arrange: Prepare the input 'divide 10 5' followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the correct result is displayed.
-    """
-    # Arrange
-    user_input = 'divide 10 5\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Result: DivideCalculation: 10.0 Divide 5.0 = 2.0" in captured.out
-
-def test_division_by_zero(monkeypatch, capsys):
-    """
-    Test handling division by zero in REPL.
-    
-    AAA Pattern:
-    - Arrange: Prepare the input 'divide 10 0' followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that the zero division error message is displayed.
-    """
-    # Arrange
-    user_input = 'divide 10 0\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Cannot divide by zero" in captured.out
-
-# ===================================================
-# Tests for invalid input handling in REPL calculator
-# ===================================================
-def test_calculator_unsupported_operation(monkeypatch, capsys):
-    """
-    Test handling invalid operation in REPL.
-    
-    AAA Pattern:
-    - Arrange: Provide an operation that is not supported.
-    - Act: Call the calculator function.
-    - Assert: Verify that the appropriate error message is displayed.
-    """
-    # Arrange
-    user_input = 'modulus 2 3\nexit\n'  # Changed 'power' to 'modulus'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Unsupported operation 'modulus'" in captured.out
-    assert "Type 'help' to see the list of supported operations." in captured.out
-
-def test_calculator_invalid_input(monkeypatch, capsys):
-    """
-    Test handling invalid input in REPL.
-    
-    AAA Pattern:
-    - Arrange: Prepare invalid input strings followed by 'exit'.
-    - Act: Call the calculator function.
-    - Assert: Verify that appropriate error messages are displayed.
-    """
-    # Arrange
-    user_input = 'invalid input\nadd 5\nsubtract\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Invalid input. Please follow the format: <operation> <num1> <num2>" in captured.out
-    assert "Type 'help' for more information." in captured.out
-
-def test_calculator_invalid_number_input(monkeypatch, capsys):
-    """
-    Test handling of invalid number input.
-
-    AAA Pattern:
-    - Arrange: Prepare input where numbers are non-numeric strings.
-    - Act: Call the calculator function.
-    - Assert: Verify that appropriate error messages are displayed.
-    """
-    # Arrange
-    user_input = 'add ten five\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "Invalid input. Please ensure numbers are valid." in captured.out or \
-           "could not convert string to float: 'ten'" in captured.out or \
-           "Invalid input. Please follow the format: <operation> <num1> <num2>" in captured.out
-
-# ===================================================
-# Additional Tests for Exception Handling
-# ===================================================
-def test_calculator_keyboard_interrupt(monkeypatch, capsys):
-    """
-    Test handling of KeyboardInterrupt (Ctrl+C).
-
-    AAA Pattern:
-    - Arrange: Simulate a KeyboardInterrupt during input().
-    - Act: Call the calculator function.
-    - Assert: Verify that the calculator exits gracefully.
-    """
-    # Arrange
-    def mock_input(prompt):
-        raise KeyboardInterrupt()
-    monkeypatch.setattr('builtins.input', mock_input)
-
-    # Act
-    with pytest.raises(SystemExit) as exc_info:
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "\nKeyboard interrupt detected. Exiting calculator. Goodbye!" in captured.out
-    assert exc_info.value.code == 0
-
-def test_calculator_eof_error(monkeypatch, capsys):
-    """
-    Test handling of EOFError (Ctrl+D).
-
-    AAA Pattern:
-    - Arrange: Simulate an EOFError during input().
-    - Act: Call the calculator function.
-    - Assert: Verify that the calculator exits gracefully.
-    """
-    # Arrange
-    def mock_input(prompt):
-        raise EOFError()
-    monkeypatch.setattr('builtins.input', mock_input)
-
-    # Act
-    with pytest.raises(SystemExit) as exc_info:
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "\nEOF detected. Exiting calculator. Goodbye!" in captured.out
-    assert exc_info.value.code == 0
-
-def test_calculator_unexpected_exception(monkeypatch, capsys):
-    """
-    Test handling of unexpected exceptions during calculation execution.
-
-    AAA Pattern:
-    - Arrange: Mock the execute method to raise an unexpected exception.
-    - Act: Call the calculator function.
-    - Assert: Verify that the appropriate error message is displayed.
-    """
-    # Arrange
-    class MockCalculation:
-        def execute(self):
-            raise Exception("Mock exception during execution")
-        def __str__(self):
-            return "MockCalculation"
-
-    def mock_create_calculation(operation, a, b):
-        return MockCalculation()
-
-    monkeypatch.setattr('app.calculation.CalculationFactory.create_calculation', mock_create_calculation)
-    user_input = 'add 10 5\nexit\n'
-    monkeypatch.setattr('sys.stdin', StringIO(user_input))
-
-    # Act
-    with pytest.raises(SystemExit):
-        calculator()
-
-    # Assert
-    captured = capsys.readouterr()
-    assert "An error occurred during calculation: Mock exception during execution" in captured.out
-    assert "Please try again." in captured.out
+@patch('builtins.input', side_effect=['add', '2', '3', 'exit'])
+@patch('builtins.print')
+def test_calculator_repl_addition(mock_print, mock_input):
+    """Test performing addition through the REPL interface."""
+    calculator_repl()
+    mock_print.assert_any_call("\nResult: 5")
