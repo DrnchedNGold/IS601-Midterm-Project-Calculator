@@ -30,7 +30,7 @@ def calculator_repl():
         print(
             "Welcome to the Python Calculator REPL!\n"
             "Type 'help' for available commands or 'exit' to quit.\n"
-            "Valid commands: add, subtract, multiply, divide, power, root, history, clear, undo, redo, save, load, help, exit"
+            "Valid commands: add, subtract, multiply, divide, power, root, modulus, int_divide, percent, abs_diff, history, clear, undo, redo, save, load, help, exit"
         )
 
         # Main loop - keeps running until the user types 'exit'
@@ -42,7 +42,11 @@ def calculator_repl():
                 if command == 'help':
                     # Show the user what commands are available
                     print("\nAvailable commands:")
-                    print("  add, subtract, multiply, divide, power, root - Perform calculations")
+                    print("  add, subtract, multiply, divide, power, root - Basic arithmetic operations")
+                    print("  modulus - Calculate remainder of division (a % b)")
+                    print("  int_divide - Integer division (floor division)")
+                    print("  percent - Calculate percentage (a as percentage of b)")
+                    print("  abs_diff - Calculate absolute difference between two numbers")
                     print("  history - Show calculation history")
                     print("  clear - Clear calculation history")
                     print("  undo - Undo the last calculation")
@@ -115,7 +119,7 @@ def calculator_repl():
                         print(f"Error loading history: {e}")
                     continue
 
-                if command in ['add', 'subtract', 'multiply', 'divide', 'power', 'root']:
+                if command in ['add', 'subtract', 'multiply', 'divide', 'power', 'root', 'modulus', 'int_divide', 'percent', 'abs_diff']:
                     # Handle arithmetic operations
                     try:
                         print("\nEnter numbers (or 'cancel' to abort):")
