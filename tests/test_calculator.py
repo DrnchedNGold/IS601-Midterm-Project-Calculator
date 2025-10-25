@@ -170,19 +170,22 @@ def test_calculator_repl_exit(mock_print, mock_input):
     with patch('app.calculator.Calculator.save_history') as mock_save_history:
         calculator_repl()
         mock_save_history.assert_called_once()
-        mock_print.assert_any_call("History saved successfully.")
-        mock_print.assert_any_call("Goodbye!")
+        # Check for colored output
+        mock_print.assert_any_call("\x1b[32mHistory saved successfully.\x1b[0m")
+        mock_print.assert_any_call("\x1b[36mGoodbye!\x1b[0m")
 
 @patch('builtins.input', side_effect=['help', 'exit'])
 @patch('builtins.print')
 def test_calculator_repl_help(mock_print, mock_input):
     """Test that help command displays available commands."""
     calculator_repl()
-    mock_print.assert_any_call("\nAvailable commands:")
+    # Check for colored output
+    mock_print.assert_any_call("\n\x1b[36mAvailable commands:\x1b[0m")
 
 @patch('builtins.input', side_effect=['add', '2', '3', 'exit'])
 @patch('builtins.print')
 def test_calculator_repl_addition(mock_print, mock_input):
     """Test performing addition through the REPL interface."""
     calculator_repl()
-    mock_print.assert_any_call("\nResult: 5")
+    # Check for colored output
+    mock_print.assert_any_call("\n\x1b[32mResult: \x1b[1m5\x1b[0m")
